@@ -2,8 +2,31 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:nota/colors/colores.dart';
 import 'models/node.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:timezone/data/latest.dart' as tz;
+import 'package:timezone/timezone.dart' as tz;
 
-void main() {
+// Crea una instancia del paquete
+final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+    FlutterLocalNotificationsPlugin();
+
+void main() async {
+
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Configuración inicial
+  const AndroidInitializationSettings initializationSettingsAndroid =
+      AndroidInitializationSettings('@mipmap/ic_launcher');
+
+  const InitializationSettings initializationSettings = InitializationSettings(
+    android: initializationSettingsAndroid,
+  );
+
+  await flutterLocalNotificationsPlugin.initialize(initializationSettings);
+
+  tz.initializeTimeZones(); // Inicializa las zonas horarias
+  tz.setLocalLocation(tz.getLocation('America/Mexico_City'));
+
   runApp(const MyApp());
 }
 
@@ -224,6 +247,7 @@ class HomeScreen extends StatelessWidget {
     );
   }
 }
+
 /*
 class Note {
   String title;
@@ -253,43 +277,86 @@ class EscribeYaScreen extends StatefulWidget {
 class _EscribeYaScreenState extends State<EscribeYaScreen> {
   final List<Note> notes = [];
 
+  //Funcion para las Notificaciones
+  Future<void> _scheduleNotification(Note note) async {
+  final androidDetails = const AndroidNotificationDetails(
+    'notes_channel',
+    'Notas',
+    channelDescription: 'Notificaciones para notas próximas a vencer',
+    importance: Importance.high,
+    priority: Priority.high,
+  );
+
+  final platformDetails = NotificationDetails(android: androidDetails);
+
+  final now = DateTime.now();
+  final duration = note.deliveryDate.difference(now);
+
+  if (duration.inSeconds > 0) {
+    await flutterLocalNotificationsPlugin.zonedSchedule(
+      note.hashCode, // ID único para la notificación
+      'Nota próxima a vencer',
+      'La nota "${note.title}" vence el ${DateFormat('dd/MM/yyyy').format(note.deliveryDate)}.',
+      tz.TZDateTime.now(tz.local).add(duration - const Duration(minutes: 10)),
+      platformDetails,
+      androidAllowWhileIdle: true,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
+    );
+  }
+}
+
   void _addNote(String title, String content, DateTime deliveryDate) {
-    final isCompleted =
-        DateTime.now().isAfter(deliveryDate); // Cambiar la lógica.
-    /*
-   
-   
-    final isCompleted = deliveryDate.isAtSameMomentAs(
-        DateTime.now().toLocal()); // Verifica si es la fecha actual.
-   
-    */
+    /*final isCompleted = */ DateTime.now().isAfter(deliveryDate); // Cambiar la lógica.
+
+    // final newNote = Note(
+    //   title: title,
+    //   content: content,
+    //   date: DateTime.now(),
+    //   deliveryDate: deliveryDate,
+    //   isCompleted: isCompleted, // Asigna el valor calculado.
+    // );
+
+    // setState(() {
+    //   notes.add(newNote);
+    // });
+
 
     final newNote = Note(
-      title: title,
-      content: content,
-      date: DateTime.now(),
-      deliveryDate: deliveryDate,
-      isCompleted: isCompleted, // Asigna el valor calculado.
+    title: title,
+    content: content,
+    date: DateTime.now(),
+    deliveryDate: deliveryDate,
+    isFavorite: false,
     );
 
     setState(() {
       notes.add(newNote);
     });
+
+    // Programa una notificación
+    _scheduleNotification(newNote);
   }
 
-  void _editNote(
-      int index, String newTitle, String newContent, DateTime newDeliveryDate) {
-    final isCompleted =
-        DateTime.now().isAfter(newDeliveryDate); // Cambiar la lógica.
-    /*   final isCompleted = newDeliveryDate.isAtSameMomentAs(
-        DateTime.now().toLocal()); // Verifica si es la fecha actual.
-*/
+  void _editNote(int index, String newTitle, String newContent, DateTime newDeliveryDate) {
+    final isCompleted = DateTime.now().isAfter(newDeliveryDate); // Cambiar la lógica.
+    
+    // setState(() {
+    //   notes[index].title = newTitle;
+    //   notes[index].content = newContent;
+    //   notes[index].deliveryDate = newDeliveryDate;
+    //   notes[index].isCompleted = isCompleted; // Actualiza isCompleted.
+    // });
+
     setState(() {
-      notes[index].title = newTitle;
-      notes[index].content = newContent;
-      notes[index].deliveryDate = newDeliveryDate;
-      notes[index].isCompleted = isCompleted; // Actualiza isCompleted.
+    notes[index].title = newTitle;
+    notes[index].content = newContent;
+    notes[index].deliveryDate = newDeliveryDate;
+    notes[index].isCompleted = isCompleted;
     });
+
+    // Reprograma la notificación para la nota editada
+    _scheduleNotification(notes[index]);
   }
 
   void _toggleFavorite(int index) {

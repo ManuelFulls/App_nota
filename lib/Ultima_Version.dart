@@ -1,9 +1,42 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:nota/colors/colores.dart';
-import 'models/node.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:timezone/data/latest.dart' as tz;
+import 'package:timezone/timezone.dart' as tz;
 
-void main() {
+// Crea una instancia del paquete
+final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+    FlutterLocalNotificationsPlugin();
+
+@override
+void initState() {
+  initState();
+  final initializationSettingsAndroid =
+      AndroidInitializationSettings('@mipmap/ic_launcher');
+  final initializationSettings = InitializationSettings(
+    android: initializationSettingsAndroid,
+  );
+  flutterLocalNotificationsPlugin.initialize(initializationSettings);
+}
+
+void main() async {
+
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Configuración inicial
+  const AndroidInitializationSettings initializationSettingsAndroid =
+      AndroidInitializationSettings('@mipmap/ic_launcher');
+
+  const InitializationSettings initializationSettings = InitializationSettings(
+    android: initializationSettingsAndroid,
+  );
+
+  await flutterLocalNotificationsPlugin.initialize(initializationSettings);
+
+  tz.initializeTimeZones(); // Inicializa las zonas horarias
+  tz.setLocalLocation(tz.getLocation('America/Mexico_City'));
+
   runApp(const MyApp());
 }
 
@@ -224,23 +257,28 @@ class HomeScreen extends StatelessWidget {
     );
   }
 }
-/*
+
+
 class Note {
   String title;
   String content;
   DateTime date;
   DateTime deliveryDate;
-  bool isFavorite; // Nuevo campo para marcar como favorito.
+  TimeOfDay? notificationTime; // Hora de notificación
+  bool isFavorite;
+  bool isCompleted;
 
   Note({
     required this.title,
     required this.content,
     required this.date,
     required this.deliveryDate,
-    this.isFavorite = false, // Inicializado como no favorito.
+    this.notificationTime,
+    this.isFavorite = false,
+    this.isCompleted = false,
   });
 }
-*/
+
 
 class EscribeYaScreen extends StatefulWidget {
   const EscribeYaScreen({super.key});
@@ -253,43 +291,105 @@ class EscribeYaScreen extends StatefulWidget {
 class _EscribeYaScreenState extends State<EscribeYaScreen> {
   final List<Note> notes = [];
 
-  void _addNote(String title, String content, DateTime deliveryDate) {
-    final isCompleted =
-        DateTime.now().isAfter(deliveryDate); // Cambiar la lógica.
-    /*
-   
-   
-    final isCompleted = deliveryDate.isAtSameMomentAs(
-        DateTime.now().toLocal()); // Verifica si es la fecha actual.
-   
-    */
+  //Funcion para las Notificaciones
+//   Future<void> _scheduleNotification(Note note) async {
+//   final androidDetails = const AndroidNotificationDetails(
+//     'notes_channel',
+//     'Notas',
+//     channelDescription: 'Notificaciones para notas próximas a vencer',
+//     importance: Importance.high,
+//     priority: Priority.high,
+//   );
+
+//   final platformDetails = NotificationDetails(android: androidDetails);
+
+//   final now = DateTime.now();
+//   final duration = note.deliveryDate.difference(now);
+
+//   if (duration.inSeconds > 0) {
+//     await flutterLocalNotificationsPlugin.zonedSchedule(
+//       note.hashCode, // ID único para la notificación
+//       'Nota próxima a vencer',
+//       'La nota "${note.title}" vence el ${DateFormat('dd/MM/yyyy').format(note.deliveryDate)}.',
+//       tz.TZDateTime.now(tz.local).add(duration - const Duration(minutes: 10)),
+//       platformDetails,
+//       androidAllowWhileIdle: true,
+//       uiLocalNotificationDateInterpretation:
+//           UILocalNotificationDateInterpretation.absoluteTime,
+//     );
+//   }
+// }
+
+  void _scheduleNotification(Note note) async {
+  if (note.notificationTime == null) return;
+
+  final notificationTime = DateTime(
+    note.deliveryDate.year,
+    note.deliveryDate.month,
+    note.deliveryDate.day,
+    note.notificationTime!.hour,
+    note.notificationTime!.minute,
+  );
+
+  await flutterLocalNotificationsPlugin.zonedSchedule(
+    note.hashCode, // ID único para cada notificación
+    "Recordatorio: ${note.title}",
+    note.content,
+    tz.TZDateTime.from(notificationTime, tz.local),
+    const NotificationDetails(
+      android: AndroidNotificationDetails(
+        'your_channel_id',
+        'your_channel_name',
+        //'your_channel_description',
+        importance: Importance.max,
+        priority: Priority.high,
+      ),
+    ),
+    androidAllowWhileIdle: true,
+    uiLocalNotificationDateInterpretation:
+        UILocalNotificationDateInterpretation.absoluteTime,
+  );
+}
+
+
+  void _addNote(String title, String content, DateTime deliveryDate, TimeOfDay notificationTime) {
+    final isCompleted = DateTime.now().isAfter(deliveryDate);
 
     final newNote = Note(
       title: title,
       content: content,
       date: DateTime.now(),
       deliveryDate: deliveryDate,
-      isCompleted: isCompleted, // Asigna el valor calculado.
+      notificationTime: notificationTime,
+      isCompleted: isCompleted,
     );
 
     setState(() {
       notes.add(newNote);
     });
+
+    _scheduleNotification(newNote); // Programar la notificación
   }
 
-  void _editNote(
-      int index, String newTitle, String newContent, DateTime newDeliveryDate) {
-    final isCompleted =
-        DateTime.now().isAfter(newDeliveryDate); // Cambiar la lógica.
-    /*   final isCompleted = newDeliveryDate.isAtSameMomentAs(
-        DateTime.now().toLocal()); // Verifica si es la fecha actual.
-*/
+  void _editNote(int index, String newTitle, String newContent, DateTime newDeliveryDate) {
+    final isCompleted = DateTime.now().isAfter(newDeliveryDate); // Cambiar la lógica.
+    
+    // setState(() {
+    //   notes[index].title = newTitle;
+    //   notes[index].content = newContent;
+    //   notes[index].deliveryDate = newDeliveryDate;
+    //   notes[index].isCompleted = isCompleted; // Actualiza isCompleted.
+    // });
+
     setState(() {
-      notes[index].title = newTitle;
-      notes[index].content = newContent;
-      notes[index].deliveryDate = newDeliveryDate;
-      notes[index].isCompleted = isCompleted; // Actualiza isCompleted.
+    notes[index].title = newTitle;
+    notes[index].content = newContent;
+    notes[index].deliveryDate = newDeliveryDate;
+    notes[index].isCompleted = isCompleted;
     });
+
+    // Reprograma la notificación para la nota editada
+    _scheduleNotification(notes[index]);
   }
 
   void _toggleFavorite(int index) {
@@ -308,8 +408,11 @@ class _EscribeYaScreenState extends State<EscribeYaScreen> {
     String title = '';
     String content = '';
     DateTime deliveryDate = DateTime.now();
+    TimeOfDay notificationTime = TimeOfDay.now();
     final deliveryDateController = TextEditingController(
         text: DateFormat('dd/MM/yyyy').format(deliveryDate));
+    final notificationTimeController = TextEditingController(
+      text: notificationTime.format(context));
 
     showDialog(
       context: context,
@@ -351,6 +454,23 @@ class _EscribeYaScreenState extends State<EscribeYaScreen> {
                     }
                   },
                 ),
+                TextField(
+                controller: notificationTimeController,
+                decoration:
+                    const InputDecoration(labelText: "Hora de notificación"),
+                readOnly: true,
+                onTap: () async {
+                  TimeOfDay? pickedTime = await showTimePicker(
+                    context: context,
+                    initialTime: notificationTime,
+                  );
+                  if (pickedTime != null) {
+                    notificationTime = pickedTime;
+                    notificationTimeController.text =
+                        notificationTime.format(context);
+                    }
+                  },
+                ),
               ],
             ),
           ),
@@ -364,7 +484,7 @@ class _EscribeYaScreenState extends State<EscribeYaScreen> {
             TextButton(
               onPressed: () {
                 if (title.isNotEmpty && content.isNotEmpty) {
-                  _addNote(title, content, deliveryDate);
+                  _addNote(title, content, deliveryDate,notificationTime);
                   Navigator.of(context).pop();
                 }
               },
